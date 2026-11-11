@@ -1,29 +1,39 @@
 # Vigía Gas
 
-Dashboard de demostración para el proyecto IoT de detección de gas. Está construido con React, TypeScript y Vite.
+Proyecto IoT de monitoreo de gas. El código está organizado en dos carpetas:
 
-## Ejecutar
+| Carpeta | Función |
+| --- | --- |
+| [`frontend/`](frontend/) | Dashboard React + Vite: lecturas, tendencia, estado e historial de alertas. |
+| [`backend/`](backend/) | API Node.js: recepción del ESP32, clasificación, almacenamiento y avisos por Telegram. |
 
-```bash
-npm install
+## Preparación
+
+Se necesita Node.js 20 o posterior. Desde esta carpeta:
+
+```powershell
+npm --prefix frontend ci
+```
+
+En `backend/.env` se configura la clave privada del ESP32 y, si se desea, el bot de Telegram. En este equipo ya existe una clave generada. Si se prepara otra copia del proyecto, crea el archivo desde `backend/.env.example` y cambia la clave de ejemplo.
+
+## Ejecutar todo
+
+```powershell
 npm run dev
 ```
 
-Abre la dirección local que muestra Vite (normalmente `http://localhost:5173`). Para generar la versión de producción:
+El dashboard estará en `http://127.0.0.1:5173` y el API en el puerto `3001`. Se detienen ambos procesos con `Ctrl+C`. También se pueden iniciar por separado con `npm run dev:backend` y `npm run dev:frontend` en dos terminales.
 
-```bash
+El frontend muestra datos de demostración hasta que el backend recibe la primera lectura. Después presenta las lecturas y alertas guardadas, con un botón para volver a la demostración.
+
+## Verificar
+
+```powershell
+npm test
 npm run build
 ```
 
-## Versión actual
+Consulta [`backend/README.md`](backend/README.md) para el formato de lecturas, las rutas del API y la configuración de Telegram. Consulta [`frontend/README.md`](frontend/README.md) para los detalles del dashboard.
 
-- Muestra nivel relativo de gas, temperatura, humedad, iluminación y estado general.
-- Presenta una tendencia de las últimas lecturas y un historial de alertas.
-- Permite simular los estados normal, advertencia y posible fuga, pausar la simulación, marcar alertas como atendidas y exportar lecturas a CSV.
-- Funciona en escritorio y móvil.
-
-**Todos los datos son simulados y viven solo en la memoria del navegador.** Al recargar la página, la demostración empieza de nuevo. Todavía no hay conexión con ESP32, backend, base de datos ni Telegram.
-
-## Siguiente etapa
-
-Conectar el panel a un backend sencillo que reciba lecturas del ESP32, guarde el historial y exponga las lecturas y alertas al frontend. El nivel de gas seguirá identificado como *valor relativo* hasta definir su calibración.
+El nivel de gas se expresa como valor relativo y requiere calibración del sensor. El prototipo académico no sustituye a un detector certificado.
