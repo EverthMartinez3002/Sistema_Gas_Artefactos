@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "telegram:setup": "node scripts/telegram.mjs setup",
+    "telegram:test": "node scripts/telegram.mjs test"
   }
 }

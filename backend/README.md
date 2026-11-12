@@ -59,6 +59,17 @@ Los umbrales iniciales de `.env.example` son provisionales: gas de advertencia `
 
 Para enviar mensajes al celular, configura `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` en `.env`. El destinatario de un chat privado debe haber iniciado una conversación con el bot. Si Telegram falla, la lectura y la alerta permanecen guardadas; la respuesta del `POST` indica `telegram: "failed"`. Actualmente no hay reintento automático de mensajes fallidos.
 
+Configuración guiada desde la raíz del proyecto:
+
+1. En Telegram, abre [@BotFather](https://t.me/BotFather), envía `/newbot` y elige nombre y usuario para el bot.
+2. Guarda el token recibido en `TELEGRAM_BOT_TOKEN` dentro de `backend/.env`.
+3. Abre tu bot y envía `/start`.
+4. Ejecuta `npm run telegram:setup`. Verifica el bot, detecta el chat y guarda su ID en `.env`. Si encuentra varios chats, muestra los IDs para que elijas con `npm run telegram:setup -- ID_DEL_CHAT`.
+5. Ejecuta `npm run telegram:test` para recibir un mensaje marcado como prueba.
+6. Reinicia el backend después de modificar `.env`.
+
+El token y el ID permanecen en la configuración local, excluida de Git. La configuración guiada no elimina webhooks de otros servicios. Las alertas salientes utilizan [sendMessage de la API oficial de Telegram](https://core.telegram.org/bots/api#sendmessage) y no necesitan una URL pública para recibir webhooks.
+
 ## Frontend
 
 El dashboard Vite desarrollado antes consulta `/api/dashboard` cada cinco segundos. Durante el desarrollo, su proxy apunta a `http://127.0.0.1:3001`. Si no hay lecturas reales, muestra la demostración; al llegar la primera lectura cambia a los datos del ESP32 y permite volver a la demostración desde la interfaz.

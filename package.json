@@ -8,6 +8,8 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run dev",
     "build": "npm --prefix frontend run build",
-    "test": "npm --prefix backend test"
+    "test": "npm --prefix backend test",
+    "telegram:setup": "npm --prefix backend run telegram:setup --",
+    "telegram:test": "npm --prefix backend run telegram:test"
   }
 }
