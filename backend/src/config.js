@@ -32,6 +32,7 @@ export function getConfig() {
     dataDir: resolve(process.cwd(), process.env.DATA_DIR || './data'),
     frontendOrigins: (process.env.FRONTEND_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map((origin) => origin.trim()).filter(Boolean),
     deviceApiKey: process.env.DEVICE_API_KEY || '',
+    adminApiKey: process.env.ADMIN_API_KEY || '',
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
     telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
     alertTimeZone: process.env.ALERT_TIME_ZONE || 'America/El_Salvador',

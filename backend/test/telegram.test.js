@@ -40,3 +40,17 @@ test('un token rechazado devuelve un diagnóstico claro', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ ok: false, error_code: 401 }), { status: 401 }))
   await assert.rejects(telegramRequest(config, 'getMe'), /token del bot es inválido/)
 })
+
+test('intenta enviar a todos los activos aunque un destinatario rechace el mensaje', async (t) => {
+  const destinations = []
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    const { chat_id } = JSON.parse(options.body)
+    destinations.push(chat_id)
+    return new Response(JSON.stringify(chat_id === '1' ? { ok: false, error_code: 403 } : { ok: true, result: {} }), { status: chat_id === '1' ? 403 : 200 })
+  })
+  t.mock.method(console, 'error', () => {})
+  const recipients = [{ chatId: '1', enabled: true }, { chatId: '2', enabled: true }, { chatId: '3', enabled: false }]
+  const result = await sendTelegramAlert({ kind: 'danger', time: new Date().toISOString() }, { gas: 76, temperature: 31, humidity: 70, light: 12 }, config, recipients)
+  assert.equal(result, 'partial')
+  assert.deepEqual(destinations, ['1', '2'])
+})

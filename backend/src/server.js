@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url'
 import { getConfig } from './config.js'
 import { validateReading } from './domain.js'
 import { DataStore } from './store.js'
-import { sendTelegramAlert } from './telegram.js'
+import { sendTelegramAlert, telegramRequest } from './telegram.js'
+import { RecipientStore } from './recipients.js'
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -56,6 +57,8 @@ function limitFromUrl(url, fallback, max) {
 export async function createApiServer(config = getConfig()) {
   const store = new DataStore(config.dataDir, config.thresholds)
   await store.init()
+  const recipients = new RecipientStore(config.dataDir)
+  await recipients.init(config.telegramChatId)
   const allowedOrigins = new Set(config.frontendOrigins || ['http://localhost:5173', 'http://127.0.0.1:5173'])
 
   const server = createServer(async (request, response) => {
@@ -63,8 +66,8 @@ export async function createApiServer(config = getConfig()) {
     if (origin && allowedOrigins.has(origin)) {
       response.setHeader('access-control-allow-origin', origin)
       response.setHeader('vary', 'Origin')
-      response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS')
-      response.setHeader('access-control-allow-headers', 'content-type, x-api-key')
+      response.setHeader('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS')
+      response.setHeader('access-control-allow-headers', 'content-type, x-api-key, x-admin-key')
     }
     if (request.method === 'OPTIONS') {
       response.writeHead(origin && !allowedOrigins.has(origin) ? 403 : 204)
@@ -75,8 +78,56 @@ export async function createApiServer(config = getConfig()) {
     try {
       const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`)
       if (request.method === 'GET' && url.pathname === '/api/health') {
-        sendJson(response, 200, { ok: true, deviceWriteEnabled: Boolean(config.deviceApiKey), telegramConfigured: Boolean(config.telegramBotToken && config.telegramChatId) })
+        sendJson(response, 200, { ok: true, deviceWriteEnabled: Boolean(config.deviceApiKey), telegramConfigured: Boolean(config.telegramBotToken && recipients.list().some((item) => item.enabled)) })
         return
+      }
+      if (url.pathname.startsWith('/api/telegram/')) {
+        if (!config.adminApiKey) throw new HttpError(503, 'Configura ADMIN_API_KEY en backend/.env para administrar destinatarios')
+        if (!isAuthorized(request.headers['x-admin-key'], config.adminApiKey)) throw new HttpError(401, 'Clave de administración inválida')
+        const callTelegram = async (method, payload) => {
+          if (!config.telegramBotToken) throw new HttpError(503, 'El token del bot aún no está configurado')
+          try { return await telegramRequest(config, method, payload) }
+          catch (error) { throw new HttpError(502, error.message) }
+        }
+        if (request.method === 'GET' && url.pathname === '/api/telegram/settings') {
+          sendJson(response, 200, { configured: Boolean(config.telegramBotToken), recipients: recipients.list() })
+          return
+        }
+        if (request.method === 'POST' && url.pathname === '/api/telegram/chats') {
+          const bot = await callTelegram('getMe')
+          const updates = await callTelegram('getUpdates', { limit: 100, timeout: 0, allowed_updates: ['message'] })
+          const chats = new Map()
+          for (const update of updates) {
+            const chat = update.message?.chat
+            if (chat) chats.set(String(chat.id), { chatId: String(chat.id), name: chat.title || [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || 'Chat de Telegram' })
+          }
+          sendJson(response, 200, { botUsername: bot.username, chats: [...chats.values()] })
+          return
+        }
+        if (request.method === 'POST' && url.pathname === '/api/telegram/recipients') {
+          sendJson(response, 201, { recipient: await recipients.add(await readBody(request)) })
+          return
+        }
+        const match = url.pathname.match(/^\/api\/telegram\/recipients\/([\w-]+)(\/test)?$/)
+        if (match) {
+          const recipient = recipients.list().find((item) => item.id === match[1])
+          if (!recipient) throw new HttpError(404, 'Destinatario no encontrado')
+          if (request.method === 'POST' && match[2]) {
+            await callTelegram('sendMessage', { chat_id: recipient.chatId, text: '✅ PRUEBA DE VIGÍA GAS\nEste chat está configurado para recibir avisos.\nEste es un mensaje de prueba; no corresponde a una fuga real.' })
+            sendJson(response, 200, { sent: true })
+            return
+          }
+          if (request.method === 'PATCH' && !match[2]) {
+            sendJson(response, 200, { recipient: await recipients.update(recipient.id, await readBody(request)) })
+            return
+          }
+          if (request.method === 'DELETE' && !match[2]) {
+            await recipients.remove(recipient.id)
+            sendJson(response, 200, { deleted: true })
+            return
+          }
+        }
+        throw new HttpError(404, 'Ruta no encontrada')
       }
       if (request.method === 'GET' && url.pathname === '/api/dashboard') {
         const limit = limitFromUrl(url, 30, 200)
@@ -113,13 +164,13 @@ export async function createApiServer(config = getConfig()) {
           throw new HttpError(400, error.message)
         }
         const { reading, alert } = await store.ingest(input)
-        const telegram = await sendTelegramAlert(alert, reading, config)
+        const telegram = await sendTelegramAlert(alert, reading, config, recipients.list())
         sendJson(response, 201, { reading, alert, telegram })
         return
       }
       throw new HttpError(404, 'Ruta no encontrada')
     } catch (error) {
-      if (!(error instanceof HttpError)) console.error(error)
+      if (!error.status || error.status >= 500) console.error(error)
       if (!response.headersSent) sendJson(response, error.status || 500, { error: error.status ? error.message : 'Error interno del servidor' })
     }
   })
@@ -132,6 +183,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   server.listen(config.port, config.host, () => {
     console.log(`Vigía Gas API escuchando en http://${config.host}:${config.port}`)
     if (!config.deviceApiKey) console.warn('DEVICE_API_KEY no configurada: la recepción de lecturas está desactivada.')
-    if (!config.telegramBotToken || !config.telegramChatId) console.warn('Telegram no configurado: las alertas se guardarán sin enviar mensajes.')
+    if (!config.telegramBotToken) console.warn('Telegram no configurado: las alertas se guardarán sin enviar mensajes.')
   })
 }

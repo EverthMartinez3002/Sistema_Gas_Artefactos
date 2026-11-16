@@ -27,9 +27,10 @@ export async function telegramRequest(config, method, payload = {}) {
   return result.result
 }
 
-export async function sendTelegramAlert(alert, reading, config) {
+export async function sendTelegramAlert(alert, reading, config, recipients = [{ chatId: config.telegramChatId, enabled: true }]) {
   if (!alert) return 'not_needed'
-  if (!config.telegramBotToken || !config.telegramChatId) return 'not_configured'
+  const active = recipients.filter((recipient) => recipient.enabled && recipient.chatId)
+  if (!config.telegramBotToken || active.length === 0) return 'not_configured'
   const time = new Intl.DateTimeFormat('es-SV', {
     timeZone: config.alertTimeZone,
     dateStyle: 'short',
@@ -44,11 +45,8 @@ export async function sendTelegramAlert(alert, reading, config) {
     `Estado: ${alert.kind === 'danger' ? 'Peligro' : 'Advertencia'}`,
     `Hora: ${time}`,
   ].join('\n')
-  try {
-    await telegramRequest(config, 'sendMessage', { chat_id: config.telegramChatId, text: message })
-    return 'sent'
-  } catch (error) {
-    console.error(`No se pudo enviar la alerta a Telegram: ${error.message}`)
-    return 'failed'
-  }
+  const results = await Promise.allSettled(active.map((recipient) => telegramRequest(config, 'sendMessage', { chat_id: recipient.chatId, text: message })))
+  const sent = results.filter((result) => result.status === 'fulfilled').length
+  for (const result of results) if (result.status === 'rejected') console.error(`No se pudo enviar la alerta a Telegram: ${result.reason.message}`)
+  return sent === active.length ? 'sent' : sent === 0 ? 'failed' : 'partial'
 }

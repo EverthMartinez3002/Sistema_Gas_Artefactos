@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getDashboard, type DashboardData } from './api'
+import TelegramSettings from './TelegramSettings'
 import {
   Activity,
   Bell,
@@ -19,6 +20,7 @@ import {
   TriangleAlert,
   Wifi,
   X,
+  Users,
 } from 'lucide-react'
 
 type Scenario = 'normal' | 'warning' | 'danger'
@@ -244,6 +246,7 @@ function App() {
         <nav className="side-nav" aria-label="Navegación principal">
           <a href="#resumen" className="active" onClick={() => setMenuOpen(false)}><LayoutDashboard size={19} /> Resumen <ChevronRight size={16} className="nav-chevron" /></a>
           <a href="#tendencias" onClick={() => setMenuOpen(false)}><Activity size={19} /> Tendencias</a>
+          <a href="#destinatarios" onClick={() => setMenuOpen(false)}><Users size={19} /> Destinatarios</a>
           <a href="#alertas" onClick={() => setMenuOpen(false)}><Bell size={19} /> Alertas {alertsToShow.length > 0 && <span className="nav-count">{alertsToShow.length}</span>}</a>
         </nav>
 
@@ -366,6 +369,7 @@ function App() {
             )}
           </section>
 
+          <TelegramSettings />
           <footer className="footer"><span>Vigía Gas · Prototipo académico IoT</span><span>{isLive ? 'Nivel de gas e iluminación expresados como valores relativos.' : 'Los datos de esta vista son simulados y no representan mediciones reales.'}</span></footer>
         </div>
       </main>

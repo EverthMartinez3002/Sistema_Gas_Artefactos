@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { getConfig } from '../src/config.js'
 import { telegramRequest } from '../src/telegram.js'
+import { RecipientStore } from '../src/recipients.js'
 
 async function main() {
   const config = getConfig()
@@ -40,12 +41,17 @@ async function main() {
   }
 
   if (command === 'test') {
-    if (!config.telegramChatId) throw new Error('Primero ejecuta npm run telegram:setup')
-    await telegramRequest(config, 'sendMessage', {
-      chat_id: config.telegramChatId,
+    const store = new RecipientStore(config.dataDir)
+    await store.init(config.telegramChatId)
+    const active = store.list().filter((item) => item.enabled)
+    if (!active.length) throw new Error('Agrega o activa un destinatario en el dashboard')
+    const results = await Promise.allSettled(active.map((item) => telegramRequest(config, 'sendMessage', {
+      chat_id: item.chatId,
       text: '✅ PRUEBA DE VIGÍA GAS\nLa conexión con Telegram funciona.\nEste es un mensaje de prueba; no corresponde a una fuga real.',
-    })
-    console.log('Mensaje de prueba enviado al chat configurado.')
+    })))
+    const sent = results.filter((result) => result.status === 'fulfilled').length
+    console.log(`Mensajes de prueba enviados: ${sent} de ${active.length}.`)
+    if (sent !== active.length) throw new Error('Algunos envíos fallaron. Prueba cada destinatario desde el dashboard para ver el diagnóstico.')
     return
   }
   throw new Error('Usa telegram:setup o telegram:test desde la raíz del proyecto.')

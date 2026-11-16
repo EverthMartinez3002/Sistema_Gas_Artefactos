@@ -38,6 +38,8 @@ Consulta [`backend/README.md`](backend/README.md) para el formato de lecturas, l
 
 Para conectar Telegram, guarda el token de BotFather en `backend/.env`, inicia la conversación con tu bot y ejecuta `npm run telegram:setup`. Después prueba la conexión con `npm run telegram:test`. Nunca agregues `backend/.env` al repositorio.
 
+Desde **Destinatarios** en el dashboard puedes administrar una o varias personas que recibirán las alertas. Ingresa la clave `ADMIN_API_KEY` de `backend/.env`, busca sus chats después de que escriban al bot y agrégalos. Permite editar, activar, desactivar, eliminar y enviar una prueba individual. La configuración queda guardada en el servidor.
+
 El repositorio de GitHub conserva el código fuente. Para recibir alertas, el backend debe mantenerse ejecutándose en una computadora con Internet o en un servidor; subir el código a GitHub no inicia ese proceso.
 
 El nivel de gas se expresa como valor relativo y requiere calibración del sensor. El prototipo académico no sustituye a un detector certificado.

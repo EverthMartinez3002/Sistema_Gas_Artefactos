@@ -57,15 +57,28 @@ Las lecturas y alertas se guardan como archivos `.ndjson` por día en `data/`. L
 
 Los umbrales iniciales de `.env.example` son provisionales: gas de advertencia `35`, gas de peligro `60`, temperatura de advertencia `30 °C` y oscuridad por debajo de `30`. Se deben ajustar con las referencias tomadas durante la calibración. El servidor utiliza una pequeña histéresis para evitar cambios repetidos cerca de cada umbral y crea alertas al **entrar** en advertencia o peligro.
 
-Para enviar mensajes al celular, configura `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` en `.env`. El destinatario de un chat privado debe haber iniciado una conversación con el bot. Si Telegram falla, la lectura y la alerta permanecen guardadas; la respuesta del `POST` indica `telegram: "failed"`. Actualmente no hay reintento automático de mensajes fallidos.
+Para enviar mensajes al celular, configura `TELEGRAM_BOT_TOKEN` en `.env` y agrega destinatarios desde la sección **Destinatarios** del dashboard. Cada persona debe haber iniciado una conversación con el bot. Las alertas se envían a todos los destinatarios activos; el fallo de un chat no impide enviar a los demás. La respuesta del `POST` indica `telegram: "partial"` cuando solo una parte de los envíos funciona, o `"failed"` si todos fallan. Actualmente no hay reintento automático de mensajes fallidos.
 
-Configuración guiada desde la raíz del proyecto:
+### Administrar destinatarios desde el dashboard
+
+1. Define una clave privada `ADMIN_API_KEY` en `backend/.env`, distinta de la clave del dispositivo. En este equipo ya se generó una. Reinicia el backend si cambias `.env`.
+2. En el dashboard, abre **Destinatarios** e ingresa esa clave. Solo se conserva en memoria hasta bloquear la sección o recargar la página.
+3. Pide a cada persona enviar `hola` al bot. Pulsa **Buscar personas en el bot**, selecciona el chat y guarda un nombre para identificarlo. También puedes ingresar un ID de chat conocido.
+4. Usa el interruptor para activar o desactivar sus alertas. **Probar** envía únicamente a esa persona un mensaje identificado como prueba. Puedes editar o eliminar cada destinatario.
+
+Telegram utiliza IDs de chat para enviar mensajes, no números de teléfono. La búsqueda consulta mensajes recientes; si una persona no aparece, pídele enviar otro mensaje al bot. No se eliminan webhooks ni se consumen actualizaciones de otros servicios.
+
+Los destinatarios se guardan en `backend/data/telegram-recipients.json`, excluido de Git. En el primer arranque se importa `TELEGRAM_CHAT_ID` como **Destinatario inicial**. Después esa lista es la fuente de configuración: desactivar o borrar todos los destinatarios detiene los envíos sin restaurar el ID antiguo. Los cambios del dashboard no requieren reiniciar.
+
+Las rutas `/api/telegram/settings`, `/api/telegram/chats` y `/api/telegram/recipients` requieren el encabezado `x-admin-key`. La clave del ESP32 no permite administrar los destinos. Se admiten hasta 20 destinatarios y se rechazan chats duplicados.
+
+Configuración inicial por terminal (antes del primer arranque del backend):
 
 1. En Telegram, abre [@BotFather](https://t.me/BotFather), envía `/newbot` y elige nombre y usuario para el bot.
 2. Guarda el token recibido en `TELEGRAM_BOT_TOKEN` dentro de `backend/.env`.
 3. Abre tu bot y envía `/start`.
 4. Ejecuta `npm run telegram:setup`. Verifica el bot, detecta el chat y guarda su ID en `.env`. Si encuentra varios chats, muestra los IDs para que elijas con `npm run telegram:setup -- ID_DEL_CHAT`.
-5. Ejecuta `npm run telegram:test` para recibir un mensaje marcado como prueba.
+5. Ejecuta `npm run telegram:test` para enviar un mensaje marcado como prueba a los destinatarios activos.
 6. Reinicia el backend después de modificar `.env`.
 
 El token y el ID permanecen en la configuración local, excluida de Git. La configuración guiada no elimina webhooks de otros servicios. Las alertas salientes utilizan [sendMessage de la API oficial de Telegram](https://core.telegram.org/bots/api#sendmessage) y no necesitan una URL pública para recibir webhooks.
