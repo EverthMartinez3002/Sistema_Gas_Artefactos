@@ -1,11 +1,12 @@
 # Vigía Gas
 
-Proyecto IoT de monitoreo de gas. El código está organizado en dos carpetas:
+Proyecto IoT de monitoreo de gas. El código está organizado en tres carpetas:
 
 | Carpeta | Función |
 | --- | --- |
 | [`frontend/`](frontend/) | Dashboard React + Vite: lecturas, tendencia, estado e historial de alertas. |
 | [`backend/`](backend/) | API Node.js: recepción del ESP32, clasificación, almacenamiento y avisos por Telegram. |
+| [`firmware/`](firmware/README.md) | Sketch ESP32 para Arduino IDE, modo de prueba sin sensores y guía del circuito. |
 
 ## Preparación
 
