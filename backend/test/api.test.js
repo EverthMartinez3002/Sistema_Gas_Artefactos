@@ -33,6 +33,7 @@ test('recibe, guarda y consulta lecturas con clave del ESP32', async () => {
     assert.equal((await first.json()).reading.state, 'normal')
     const warning = await (await send({ ...sample, gas: 42 })).json()
     assert.equal(warning.alert.kind, 'warning')
+    assert.equal(warning.alert.status, 'active')
     const danger = await (await send({ ...sample, gas: 75, light: 12 })).json()
     assert.equal(danger.alert.kind, 'danger')
     assert.equal(danger.telegram, 'not_configured')
@@ -45,16 +46,43 @@ test('recibe, guarda y consulta lecturas con clave del ESP32', async () => {
     assert.equal(dashboard.readings.length, 4)
     assert.equal(dashboard.alerts.length, 2)
     assert.equal(dashboard.latest.gas, 76)
+    const [active, closed] = dashboard.alerts
+    assert.equal(active.status, 'active')
+    assert.equal(active.closedAt, null)
+    assert.equal(active.durationMs, null)
+    assert.equal(closed.status, 'closed')
+    assert.equal(closed.closedAt, danger.reading.time)
+    assert.equal(closed.durationMs, Date.parse(danger.reading.time) - Date.parse(warning.reading.time))
 
     await new Promise((done) => server.close(done))
     server = null
-    const restarted = await createApiServer(config)
-    assert.equal(restarted.listening, false)
-    await new Promise((done) => restarted.listen(0, '127.0.0.1', done))
-    const persisted = await (await fetch(`http://127.0.0.1:${restarted.address().port}/api/dashboard`)).json()
+    server = await createApiServer(config)
+    await new Promise((done) => server.listen(0, '127.0.0.1', done))
+    const restartedBase = `http://127.0.0.1:${server.address().port}`
+    const persisted = await (await fetch(`${restartedBase}/api/dashboard`)).json()
     assert.equal(persisted.readings.length, 4)
-    assert.equal(persisted.alerts.length, 2)
-    await new Promise((done) => restarted.close(done))
+    assert.deepEqual(persisted.alerts, dashboard.alerts)
+
+    const sendAfterRestart = async (input) => {
+      const response = await fetch(`${restartedBase}/api/readings`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': config.deviceApiKey },
+        body: JSON.stringify(input),
+      })
+      assert.equal(response.status, 201)
+      return response.json()
+    }
+    await sendAfterRestart({ ...sample, deviceId: 'esp32-02' })
+    const held = await sendAfterRestart({ ...sample, gas: 57 })
+    assert.equal(held.reading.state, 'danger')
+    assert.equal(held.alert, null)
+    const recovery = await sendAfterRestart(sample)
+    assert.equal(recovery.alert, null)
+    const history = await (await fetch(`${restartedBase}/api/alerts`)).json()
+    assert.equal(history.alerts.length, 2)
+    assert.equal(history.alerts[0].status, 'closed')
+    assert.equal(history.alerts[0].closedAt, recovery.reading.time)
+    assert.equal(history.alerts[0].durationMs, Date.parse(recovery.reading.time) - Date.parse(danger.reading.time))
   } finally {
     if (server?.listening) await new Promise((done) => server.close(done))
     const absolute = resolve(directory)

@@ -17,6 +17,9 @@ export type ApiAlert = {
   title: string
   detail: string
   acknowledged: boolean
+  status: 'active' | 'closed' | 'unknown'
+  closedAt: string | null
+  durationMs: number | null
 }
 
 export type DashboardData = {

@@ -53,6 +53,8 @@ Invoke-RestMethod -Uri 'http://localhost:3001/api/readings' -Method Post -Header
 
 Las lecturas y alertas se guardan como archivos `.ndjson` por día en `data/`. La carpeta se crea automáticamente y está excluida de Git. Una lectura se considera reciente durante 30 segundos.
 
+Cada alerta devuelve `time` (inicio), `status`, `closedAt` (cierre) y `durationMs` (duración en milisegundos). La primera lectura del mismo dispositivo que cambia de estado cierra el evento. Por ejemplo, al pasar de advertencia a peligro, termina la advertencia y comienza una alerta de peligro. Mientras no llegue una lectura que confirme el cambio, la alerta permanece `active` y el cierre y la duración son `null`. Al reiniciar se reconstruye el historial con las lecturas guardadas. Si falta la lectura que abrió un registro anterior, su estado será `unknown`.
+
 ## Alertas y Telegram
 
 Los umbrales iniciales de `.env.example` son provisionales: gas de advertencia `35`, gas de peligro `60`, temperatura de advertencia `30 °C` y oscuridad por debajo de `30`. Se deben ajustar con las referencias tomadas durante la calibración. El servidor utiliza una pequeña histéresis para evitar cambios repetidos cerca de cada umbral y crea alertas al **entrar** en advertencia o peligro.

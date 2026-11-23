@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getDashboard, type DashboardData } from './api'
+import { getDashboard, type ApiAlert, type DashboardData } from './api'
 import TelegramSettings from './TelegramSettings'
 import {
   Activity,
@@ -32,13 +32,11 @@ type Reading = {
   humidity: number
   light: number
 }
-type Alert = {
+type Alert = Omit<ApiAlert, 'id' | 'time' | 'closedAt' | 'deviceId'> & {
   id: number | string
   time: Date
-  kind: 'warning' | 'danger'
-  title: string
-  detail: string
-  acknowledged: boolean
+  closedAt: Date | null
+  deviceId?: string
 }
 
 const scenarioCopy: Record<Scenario, { label: string; message: string; hint: string }> = {
@@ -93,6 +91,22 @@ const timeText = (date: Date) =>
 
 const dateText = (date: Date) =>
   new Intl.DateTimeFormat('es-SV', { day: 'numeric', month: 'long', year: 'numeric' }).format(date)
+
+const alertDateFormatter = new Intl.DateTimeFormat('es-SV', {
+  day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+})
+
+function durationText(milliseconds: number) {
+  const seconds = Math.floor(milliseconds / 1000)
+  if (seconds === 0) return 'Menos de 1 s'
+  const units = [
+    [Math.floor(seconds / 86400), 'd'],
+    [Math.floor(seconds / 3600) % 24, 'h'],
+    [Math.floor(seconds / 60) % 60, 'min'],
+    [seconds % 60, 's'],
+  ]
+  return units.filter(([value]) => value !== 0).map(([value, unit]) => `${value} ${unit}`).join(' ')
+}
 
 function GasChart({ readings, live }: { readings: Reading[]; live: boolean }) {
   const chart = readings.slice(-30)
@@ -149,7 +163,13 @@ function App() {
     ? backendData!.readings.map((item) => ({ ...item, time: new Date(item.time) }))
     : readings
   const alertsToShow: Alert[] = isLive
-    ? backendData!.alerts.map((item) => ({ ...item, time: new Date(item.time) }))
+    ? backendData!.alerts.map((item) => ({
+      ...item,
+      time: new Date(item.time),
+      status: item.status ?? 'unknown',
+      closedAt: item.closedAt ? new Date(item.closedAt) : null,
+      durationMs: item.durationMs ?? null,
+    }))
     : alerts
   const current = readingsToShow[readingsToShow.length - 1]
   const activeScenario = isLive ? backendData!.latest!.state : scenario
@@ -204,16 +224,24 @@ function App() {
     setReadings((previous) => [...previous.slice(-59), reading])
     setClock(time.getTime())
 
-    if (next !== 'normal') {
-      setAlerts((previous) => [{
+    setAlerts((previous) => {
+      const history = previous.map((alert): Alert => {
+        if (alert.status !== 'active') return alert
+        return { ...alert, status: 'closed', closedAt: time, durationMs: time.getTime() - alert.time.getTime() }
+      })
+      if (next === 'normal' || (next === 'warning' && scenario === 'danger')) return history
+      return [{
         id: time.getTime(),
         time,
         kind: next,
         title: next === 'danger' ? 'Posible fuga de gas' : 'Lectura elevada',
         detail: `${reading.gas}% relativo de gas · ${reading.temperature.toFixed(1)} °C · ${reading.light < 30 ? 'A oscuras' : 'Iluminado'}`,
         acknowledged: false,
-      }, ...previous])
-    }
+        status: 'active',
+        closedAt: null,
+        durationMs: null,
+      }, ...history]
+    })
   }
 
   function exportCsv() {
@@ -358,13 +386,21 @@ function App() {
               <div className="empty-alerts"><div className="empty-icon"><Bell size={25} /></div><strong>Sin alertas por ahora</strong><p>Las advertencias y posibles fugas aparecerán aquí cuando se detecten.</p></div>
             ) : (
               <div className="alerts-list">{alertsToShow.map((alert) => (
-                <div className="alert-row" key={alert.id}>
-                  <div className={`alert-icon ${alert.kind}`}><TriangleAlert size={20} /></div>
-                  <div className="alert-info"><strong>{alert.title}</strong><span>{alert.detail}</span></div>
-                  <span className={`alert-badge ${alert.kind}`}>{alert.kind === 'danger' ? 'Peligro' : 'Advertencia'}</span>
-                  <span className="alert-timestamp">{timeText(alert.time)}</span>
-                  {!isLive && <button className={`ack-button ${alert.acknowledged ? 'done' : ''}`} onClick={() => setAlerts((previous) => previous.map((item) => item.id === alert.id ? { ...item, acknowledged: !item.acknowledged } : item))} aria-label={`${alert.acknowledged ? 'Marcar como pendiente' : 'Marcar como atendida'}: ${alert.title}`} title={alert.acknowledged ? 'Atendida' : 'Marcar como atendida'}><Check size={17} /></button>}
-                </div>
+                <article className="alert-record" key={alert.id}>
+                  <div className="alert-row">
+                    <div className={`alert-icon ${alert.kind}`}><TriangleAlert size={20} /></div>
+                    <div className="alert-summary"><strong>{alert.title}</strong><span>{alert.detail}</span>{alert.deviceId && <span>{alert.deviceId}</span>}</div>
+                    <span className={`alert-status ${alert.status}`}>
+                      {alert.status === 'active' ? 'Abierta' : alert.status === 'closed' ? 'Cerrada' : 'Sin confirmar'}
+                    </span>
+                    {!isLive && <button className={`ack-button ${alert.acknowledged ? 'done' : ''}`} onClick={() => setAlerts((previous) => previous.map((item) => item.id === alert.id ? { ...item, acknowledged: !item.acknowledged } : item))} aria-label={`${alert.acknowledged ? 'Marcar como pendiente' : 'Marcar como atendida'}: ${alert.title}`} title={alert.acknowledged ? 'Atendida' : 'Marcar como atendida'}><Check size={17} /></button>}
+                  </div>
+                  <dl className="alert-lifecycle">
+                    <div><dt>Inicio</dt><dd><time dateTime={alert.time.toISOString()}>{alertDateFormatter.format(alert.time)}</time></dd></div>
+                    <div><dt>Cierre</dt><dd>{alert.closedAt ? <time dateTime={alert.closedAt.toISOString()}>{alertDateFormatter.format(alert.closedAt)}</time> : alert.status === 'active' ? 'Pendiente' : 'Sin registro'}</dd></div>
+                    <div><dt>Duración</dt><dd>{alert.durationMs === null ? '—' : durationText(alert.durationMs)}</dd></div>
+                  </dl>
+                </article>
               ))}</div>
             )}
           </section>
